@@ -126,7 +126,7 @@ apply them from the start.
   token is valid but the action is not permitted.
 - **Identical login error messages** for unknown email and wrong password, so the
   endpoint cannot be used to enumerate registered accounts.
-- **Secrets in environment variables**, never committed.
+- **Secrets in the environment variables**, never committed.
 
 ## License
 
