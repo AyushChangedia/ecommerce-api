@@ -6,17 +6,23 @@ const SALT_ROUNDS = 10;
 
 async function register(req, res, next) {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password } = req.body;
 
     // We never store the password. bcrypt is deliberately slow, which is
     // exactly what makes a leaked database hard to brute-force.
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
+    // Registration always creates a customer. `role` used to be taken from the
+    // request body, so anyone could POST {"role":"admin"} to this unauthenticated
+    // endpoint and mint themselves an admin — and the login token then carried
+    // that role straight through requireAdmin. A privilege boundary cannot be
+    // set by the party it exists to constrain, so promotion has to happen
+    // out-of-band: an authenticated admin path, or the database.
     const result = await pool.query(
       `INSERT INTO users (name, email, password_hash, role)
-       VALUES ($1, $2, $3, $4)
+       VALUES ($1, $2, $3, 'customer')
        RETURNING id, name, email, role, created_at`,
-      [name, email.toLowerCase(), passwordHash, role === "admin" ? "admin" : "customer"]
+      [name, email.toLowerCase(), passwordHash]
     );
 
     res.status(201).json({ user: result.rows[0] });
