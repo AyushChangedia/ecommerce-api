@@ -1,4 +1,9 @@
-require("dotenv").config();
+const { validateEnv } = require("./config/env");
+
+// Before anything opens a socket: refuse to start if the environment cannot
+// support the guarantees the API makes.
+validateEnv();
+
 const app = require("./app");
 const pool = require("./config/db");
 

@@ -18,15 +18,28 @@ async function createOrder(req, res, next) {
   const client = await pool.connect();
 
   try {
-    const { items } = req.body; // [{ productId, quantity }]
-    const productIds = items.map((i) => i.productId);
+    // Collapse repeated products into one line each. The stock check below
+    // reads a snapshot taken before any decrement, so two lines for the same
+    // product were each compared against the full stock: 5 + 5 of a product
+    // with 6 in stock passed both checks, then decremented twice. Only the
+    // CHECK (stock >= 0) constraint caught it, as a 500.
+    const merged = new Map();
+    for (const { productId, quantity } of req.body.items) {
+      merged.set(productId, (merged.get(productId) ?? 0) + quantity);
+    }
+    const items = [...merged].map(([productId, quantity]) => ({ productId, quantity }));
+
+    // Locking in a consistent order stops two concurrent orders that share
+    // products from each holding a row the other needs.
+    const productIds = items.map((i) => i.productId).sort((a, b) => a - b);
 
     await client.query("BEGIN");
 
     // FOR UPDATE locks these rows until COMMIT. Without it, two customers
     // buying the last unit simultaneously could both pass the stock check.
     const productsResult = await client.query(
-      `SELECT id, price, stock FROM products WHERE id = ANY($1::int[]) FOR UPDATE`,
+      `SELECT id, price, stock FROM products
+       WHERE id = ANY($1::int[]) ORDER BY id FOR UPDATE`,
       [productIds]
     );
 
