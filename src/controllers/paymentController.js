@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const pool = require("../config/db");
+const { rollback } = require("../db/transaction");
 
 /**
  * Pay for an order.
@@ -25,22 +26,22 @@ async function createPayment(req, res, next) {
     );
 
     if (orderResult.rowCount === 0) {
-      await client.query("ROLLBACK");
+      await rollback(client);
       return res.status(404).json({ error: "Order not found" });
     }
 
     const order = orderResult.rows[0];
 
     if (order.user_id !== req.user.userId) {
-      await client.query("ROLLBACK");
+      await rollback(client);
       return res.status(403).json({ error: "You cannot pay for someone else's order" });
     }
     if (order.status === "paid") {
-      await client.query("ROLLBACK");
+      await rollback(client);
       return res.status(409).json({ error: "Order is already paid" });
     }
     if (order.status === "cancelled") {
-      await client.query("ROLLBACK");
+      await rollback(client);
       return res.status(409).json({ error: "Cannot pay for a cancelled order" });
     }
 
@@ -66,7 +67,7 @@ async function createPayment(req, res, next) {
 
     res.status(201).json({ payment: paymentResult.rows[0] });
   } catch (err) {
-    await client.query("ROLLBACK");
+    await rollback(client);
     next(err);
   } finally {
     client.release();

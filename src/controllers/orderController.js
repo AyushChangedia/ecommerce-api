@@ -1,4 +1,5 @@
 const pool = require("../config/db");
+const { rollback } = require("../db/transaction");
 
 /**
  * Create an order.
@@ -49,11 +50,11 @@ async function createOrder(req, res, next) {
     for (const item of items) {
       const product = products.get(item.productId);
       if (!product) {
-        await client.query("ROLLBACK");
+        await rollback(client);
         return res.status(404).json({ error: `Product ${item.productId} not found` });
       }
       if (product.stock < item.quantity) {
-        await client.query("ROLLBACK");
+        await rollback(client);
         return res.status(409).json({
           error: `Insufficient stock for product ${item.productId}`,
           available: product.stock
@@ -90,7 +91,7 @@ async function createOrder(req, res, next) {
     await client.query("COMMIT");
     res.status(201).json({ order });
   } catch (err) {
-    await client.query("ROLLBACK");
+    await rollback(client);
     next(err);
   } finally {
     // Always hand the connection back, success or failure, or the pool leaks.
@@ -178,17 +179,17 @@ async function cancelOrder(req, res, next) {
       [req.params.id]
     );
     if (orderResult.rowCount === 0) {
-      await client.query("ROLLBACK");
+      await rollback(client);
       return res.status(404).json({ error: "Order not found" });
     }
 
     const order = orderResult.rows[0];
     if (order.user_id !== req.user.userId && req.user.role !== "admin") {
-      await client.query("ROLLBACK");
+      await rollback(client);
       return res.status(403).json({ error: "This order does not belong to you" });
     }
     if (order.status !== "pending") {
-      await client.query("ROLLBACK");
+      await rollback(client);
       return res.status(409).json({ error: `Cannot cancel a ${order.status} order` });
     }
 
@@ -208,7 +209,7 @@ async function cancelOrder(req, res, next) {
 
     res.json({ message: "Order cancelled and stock restored" });
   } catch (err) {
-    await client.query("ROLLBACK");
+    await rollback(client);
     next(err);
   } finally {
     client.release();
