@@ -99,15 +99,34 @@ async function createOrder(req, res, next) {
   }
 }
 
+const DEFAULT_PAGE_SIZE = 20;
+const MAX_PAGE_SIZE = 100;
+
 /**
  * List the logged-in user's orders WITH their line items.
  *
  * The naive version fetches orders, then loops and queries items for each one:
  * 1 + N queries. This does it in ONE query by joining and aggregating the
  * items into JSON server-side.
+ *
+ * Paginated, because it was not. Every other list in this API is bounded —
+ * /api/products takes limit and offset and caps them at 100 — while this one
+ * returned a customer's entire history with every line item of every order
+ * expanded into JSON, in one response, built in one pass in the database. A
+ * long-standing customer is a slow query, a large allocation and a response
+ * nobody can page through; there is no size at which it starts refusing.
+ *
+ * `total` is the count of orders, not of the rows on this page, so a client
+ * can tell whether there is another page without asking for one.
  */
 async function listMyOrders(req, res, next) {
   try {
+    const limit = Math.min(
+      Number(req.query.limit) || DEFAULT_PAGE_SIZE,
+      MAX_PAGE_SIZE
+    );
+    const offset = Number(req.query.offset) || 0;
+
     const result = await pool.query(
       `SELECT
          o.id,
@@ -130,11 +149,23 @@ async function listMyOrders(req, res, next) {
        LEFT JOIN products    p  ON p.id = oi.product_id
        WHERE o.user_id = $1
        GROUP BY o.id
-       ORDER BY o.created_at DESC`,
+       ORDER BY o.created_at DESC, o.id DESC
+       LIMIT $2 OFFSET $3`,
+      [req.user.userId, limit, offset]
+    );
+
+    const totalResult = await pool.query(
+      "SELECT COUNT(*)::int AS total FROM orders WHERE user_id = $1",
       [req.user.userId]
     );
 
-    res.json({ count: result.rowCount, orders: result.rows });
+    res.json({
+      count: result.rowCount,
+      total: totalResult.rows[0].total,
+      limit,
+      offset,
+      orders: result.rows
+    });
   } catch (err) {
     next(err);
   }
