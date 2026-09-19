@@ -1,5 +1,5 @@
 const express = require("express");
-const { body, param } = require("express-validator");
+const { body, param, query } = require("express-validator");
 const validate = require("../middleware/validate");
 const { verifyToken } = require("../middleware/auth");
 const {
@@ -25,7 +25,13 @@ router.post(
   createOrder
 );
 
-router.get("/", listMyOrders);
+router.get(
+  "/",
+  query("limit").optional().isInt({ min: 1, max: 100 }),
+  query("offset").optional().isInt({ min: 0 }),
+  validate,
+  listMyOrders
+);
 router.get("/:id", param("id").isInt(), validate, getOrder);
 router.patch("/:id/cancel", param("id").isInt(), validate, cancelOrder);
 

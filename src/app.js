@@ -3,6 +3,11 @@ const { errorHandler, notFound } = require("./middleware/errorHandler");
 
 const app = express();
 
+// req.ip must be the caller, not the load balancer in front of it. Without
+// this every request behind a proxy shares one address and the login rate
+// limiter throttles the whole internet as a single client.
+app.set("trust proxy", Number(process.env.TRUST_PROXY_HOPS ?? 1));
+
 // Parses JSON bodies into req.body. Without it req.body is undefined on POST.
 app.use(express.json());
 
