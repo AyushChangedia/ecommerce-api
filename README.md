@@ -110,6 +110,12 @@ two classic problems against the live database.
 **~15x faster** with 200 fewer network round trips. `GET /api/orders` uses the
 single-query version.
 
+**Latency multiplies it.** The table above is from `npm run benchmark`. Run the same
+endpoint from Pune against a PostgreSQL instance in Ohio and every one of those 201
+queries pays a full cross-continent round trip: about **45 s** for the loop versus
+**0.46 s** for the single JOIN (~98x). The bug is invisible in code review; it only
+shows up when you measure.
+
 Indexes are deliberately kept out of `migrate` (they live in `db/indexes.sql`) so the
 before/after difference is reproducible. Run `npm run migrate -- --with-indexes` to
 apply them from the start.
